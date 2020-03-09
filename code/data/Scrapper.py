@@ -1,13 +1,23 @@
 import os
 import praw
 import pprint
+import pandas as pd
 
 subreddits = [
     "askreddit",
-    # "askphilosophy",
-    # 'askscience',
-    # 'askengineers',
-    # 'askculinary'
+    "askphilosophy",
+    'askscience',
+    'askengineers',
+    'askculinary',
+    'worldnews',
+    'movies',
+    'news',
+    'showerthoughts',
+    'explainlikeimfive',
+    'books',
+    'history',
+    'philosophy',
+    'politics'
 ]
 
 
@@ -21,44 +31,44 @@ class Scrapper:
                                   client_secret=self.secret_key,
                                   user_agent=self.user_agent)
 
-        print(self.reddit.read_only)
-
-    def getPosts(self, limit):
+    def createDataSet(self, post_limit, comment_limit_per_post, save_file):
+        dataset = pd.DataFrame({'comment': [], 'reply': []})
         for subreddit in subreddits:
-            for submission in self.reddit.subreddit(subreddit).hot(limit=limit):
+            for submission in self.reddit.subreddit(subreddit).hot(limit=post_limit):
                 # print(submission.title)
                 # print(len(submission.comments))
-                replies = self.getReplies(submission)
+                replies = self.getReplies(submission, comment_limit_per_post)
                 if replies is not None:
-                    for reply in replies:
-                        print()
-                        print(reply[0])
-                        print(reply[1])
+                    dataset = dataset.append(pd.DataFrame(replies, columns=dataset.columns))
+
+            print("{} done".format(subreddit))
+
+        # Save the dataset
+        dataset.to_pickle(save_file)
+
+        return dataset
 
     def processComment(self, comment):
-        #todo
+        # todo
         return comment.split()
 
-    def getReplies(self, post):
-        print("A")
+    def getReplies(self, post, comment_limit):
         comment_with_response = []
 
         if len(post.comments) > 0:
             comments = post.comments.list()
         else:
-            print("Post has no comments. Ignoring")
+            # print("Post has no comments. Ignoring")
             return
 
-        for comment in comments:
-            if len(comment._replies) > 0:
-                for sub_comment in comment.replies.list():
-                    if hasattr(sub_comment, 'body'):
-                        comment_with_response.append((self.processComment(comment.body), self.processComment(sub_comment.body)))
+        for index, comment in enumerate(comments):
+            if hasattr(comment, '_replies'):
+                if len(comment._replies) > 0:
+                    for sub_comment in comment.replies.list():
+                        if hasattr(sub_comment, 'body'):
+                            comment_with_response.append((comment.body, sub_comment.body))
 
-                return comment_with_response
+            if index > comment_limit:
+                break
 
-        else:
-            print("Comment has no replies. Ignoring")
-
-
-
+        return comment_with_response
