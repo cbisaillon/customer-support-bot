@@ -29,16 +29,17 @@ def createDataSet():
 def buildCorpus(redditData):
     print("Building corpus...")
     for sentence in brown.sents():
-        dictionary.addSentence(dictionary.parseSentence(sentence))
+        dictionary.addSentence(sentence)
 
-    print("Brown corpus built.")
-    print("Adding reddit data to dictionary")
+    # print("Brown corpus built.")
+    # print("Adding reddit data to dictionary")
 
-    for comment in redditData['comment']:
-        dictionary.addSentence(comment)
+    # for comment in redditData['comment']:
+    #     dictionary.addSentence(comment)
+    #
+    # for reply in redditData['reply']:
+    #     dictionary.addSentence(reply)
 
-    for reply in redditData['reply']:
-        dictionary.addSentence(reply)
 
     print("Built corpus")
 
@@ -111,22 +112,34 @@ def splitTrainAndTestData(data):
     nb_data = len(data)
     split_idx = math.floor(0.70 * nb_data)
 
-    return data[:split_idx], data[split_idx:]
+    return convertDataToTensors(data[:split_idx], data[split_idx:], 20000)
 
 
-def convertDataToTensors(train_data, test_data):
+def convertDataToTensors(train_data, test_data, max_size_per_batch):
     print("Converting train and test data to tensors")
-    train_data.apply(lambda x: dictionary.entryToTensor(x), axis=1)
-    test_data.apply(lambda x: dictionary.entryToTensor(x), axis=1)
-    print(train_data.head())
+
+    # Split the data into multiple dataframe
+    train_dataframe_size = math.ceil(len(train_data) / max_size_per_batch)
+    test_dataframe_size = math.ceil(len(test_data) / max_size_per_batch)
+
+    train_dataframes = []
+    for i in range(train_dataframe_size):
+        train_batch = train_data[max_size_per_batch * i: max_size_per_batch * (i + 1)]
+        train_dataframes.append(train_batch)
+
+    test_dataframes = []
+    for i in range(test_dataframe_size):
+        test_batch = test_data[max_size_per_batch * i: max_size_per_batch * (i + 1)]
+        test_dataframes.append(test_batch)
+
+    return train_dataframes, test_dataframes
 
 
 def main():
     # Read the comments data
     data = pd.read_pickle(pickle_file)
     buildCorpus(data)
-    print(dictionary.nbWords)
-    exit()
+
     # Hyper parameters
     ntokens = dictionary.nbWords
     embedind_dimension = 200
@@ -141,14 +154,13 @@ def main():
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1.0, gamma=0.95)
 
     train_data, test_data = splitTrainAndTestData(data)
-    train_tensor, test_tensor = convertDataToTensors(train_data, test_data)
 
     # Train the model
     print("Training model...")
 
     for epoch in range(1, epochs + 1):
         epoch_start_time = time.time()
-        train(chatbot, optimizer, scheduler, data=train_data)
+        train(chatbot, optimizer, scheduler, data=train_data, epoch=epoch)
         val_loss = evaluate(chatbot, test_data)
 
         print("-" * 89)

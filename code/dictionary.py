@@ -1,5 +1,7 @@
 import torch
 from nltk.tokenize import word_tokenize
+from collections import OrderedDict
+from operator import itemgetter
 from nltk.tokenize import sent_tokenize
 
 SOS = 0
@@ -12,24 +14,40 @@ class Dictionary:
     def __init__(self):
         self.word2Index = {"<SOS>": SOS, "<EOS>": EOS, "<UNK>": UNKNOWN}
         self.index2Word = ["<SOS>", "<EOS>", "<UNK>"]
+        self.word2Count = OrderedDict({"<SOS>": 1, "<EOS>": 1, "<UNK>": 1})
         self.nbWords = 3
 
     def addWord(self, word):
         if not word in self.word2Index:
             self.word2Index[word] = len(self.word2Index.keys())
             self.index2Word.append(word)
+            self.word2Count[word] = 1
             self.nbWords += 1
+        else:
+            self.word2Count[word] += 1
+
 
     def addSentence(self, sentence):
-        for word in self.parseSentence(sentence):
+        parsedSentence = self.parseSentence(sentence)
+        for word in parsedSentence:
             self.addWord(word)
 
     def parseSentence(self, sentence):
         if type(sentence) is list:
-            sentence = ''.join(sentence)
+            sentence = ' '.join(sentence)
 
         sentence = word_tokenize(sentence.lower())
+        sentence = ["<SOS>"] + sentence
+        sentence.append("<EOS>")
+
         return sentence
+
+    def keepNWords(self, n):
+        """
+        Remove the least used words until the vocabulary size is of size n
+        :param n: the size that the vocabulary should be
+        """
+        print(self.word2Count)
 
     def oneHotEncode(self, word):
         word = word.lower()
@@ -37,7 +55,7 @@ class Dictionary:
         if word in self.word2Index.keys():
             one_hot[self.word2Index[word]] = 1
         else:
-            print("{} unkownn".format(word))
+            # print("{} unkownn".format(word))
             one_hot[UNKNOWN] = 1
 
         return one_hot
