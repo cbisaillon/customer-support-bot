@@ -2,8 +2,9 @@ import os
 import praw
 import pprint
 import pandas as pd
+from prawcore.exceptions import ServerError
 
-subreddits = [
+subreddits = {
     "askreddit",
     "askphilosophy",
     'askscience',
@@ -15,10 +16,21 @@ subreddits = [
     'showerthoughts',
     'explainlikeimfive',
     'books',
-    'history',
+    'story',
     'philosophy',
-    'politics'
-]
+    'politics',
+    # 'todayilearned',
+    'aww',
+    'music',
+    'blog',
+    'gifs',
+    'television',
+    'lifeprotips',
+    'space',
+    'diy',
+    'gadgets',
+    'food',
+}
 
 
 class Scrapper:
@@ -34,14 +46,18 @@ class Scrapper:
     def createDataSet(self, post_limit, comment_limit_per_post, save_file):
         dataset = pd.DataFrame({'comment': [], 'reply': []})
         for subreddit in subreddits:
+            print("doing: {}".format(subreddit))
             for submission in self.reddit.subreddit(subreddit).hot(limit=post_limit):
                 # print(submission.title)
                 # print(len(submission.comments))
-                replies = self.getReplies(submission, comment_limit_per_post)
-                if replies is not None:
-                    dataset = dataset.append(pd.DataFrame(replies, columns=dataset.columns))
+                try:
+                    replies = self.getReplies(submission, comment_limit_per_post)
+                    if replies is not None:
+                        dataset = dataset.append(pd.DataFrame(replies, columns=dataset.columns))
+                except Exception as e:
+                    print("Server error: {}".format(str(e)))
 
-            print("{} done".format(subreddit))
+
 
         # Save the dataset
         dataset.to_pickle(save_file)
