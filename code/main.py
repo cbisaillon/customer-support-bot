@@ -14,6 +14,10 @@ import math
 pickle_file = "../dataset/comment-reply.pkl"
 dictionary = Dictionary()
 
+device = torch.device("cpu")
+# if torch.cuda.is_available():
+#     device = torch.device("cuda:0")
+
 
 def createDataSet():
     """
@@ -40,11 +44,10 @@ def buildCorpus(redditData):
     # for reply in redditData['reply']:
     #     dictionary.addSentence(reply)
 
-
     print("Built corpus")
 
 
-criterion = nn.CrossEntropyLoss()
+criterion = nn.CrossEntropyLoss().to(device)
 lr = 5.0
 bptt = 35
 print_interval = 200
@@ -56,36 +59,55 @@ epochs = 3
 best_model = None
 
 
-def get_batch(data, index):
-    # todo
-    pass
+def sentenceToTensor(sentence):
+    """
+    Transforms a sentence to a tensor of size (sentence size, word in dictionary)
+    :param sentence: the sentence to make into a tensor
+    :return: a tensor with each row corresponding to the one hot encoding of the word
+    """
+
+    parsed_sentence = dictionary.parseSentence(sentence, remove_unknown_words=True)
+    tensor = torch.zeros((len(parsed_sentence), dictionary.nbWords))
+
+    for i, word in enumerate(parsed_sentence):
+        one_hot_word = dictionary.oneHotEncode(word)
+        tensor[i] = one_hot_word
+
+    return tensor.long()
 
 
-def train(model, optimizer, scheduler, data, epoch):
+def train(model, optimizer, scheduler, data_batched, epoch):
     model.train()
     total_loss = 0
     start_time = time.time()
     ntokens = dictionary.nbWords
 
-    # todo: data have to be a tensor
-    for batch, i in enumerate(range(0, data.size(0) - 1, bptt)):
-        data, targets = get_batch(data, i)
-        optimizer.zero_grad()
+    for batchIdx, batch in enumerate(data_batched):
+        # Go through each comment/reply in the batch
+        for entryIdx, entry in batch.iterrows():
+            data, target = entry['comment'], entry['reply']
+            data, target = sentenceToTensor(data).to(device), sentenceToTensor(target).to(device)
 
-        output = model(data)
-        loss = criterion(output.view(-1, ntokens), targets)
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
-        optimizer.step()
+            print(data.shape, target.shape)
 
-        total_loss += loss.item()
-        if batch % print_interval == 0 and batch > 0:
-            cur_loss = total_loss / print_interval
-            elapsed = time.time() - start_time
+            optimizer.zero_grad()
 
-            print("Epoch {:3d} | {:5d}/{:5d} batches | loss: {:5.2f}".format(epoch, batch, train_batch_size, cur_loss))
-            total_loss = 0
-            start_time = time.time()
+            output = model(data)
+            loss = criterion(output, target)
+
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+            optimizer.step()
+
+            total_loss += loss.item()
+            if batch % print_interval == 0 and batch > 0:
+                cur_loss = total_loss / print_interval
+                elapsed = time.time() - start_time
+
+                print("Epoch {:3d} | {:5d}/{:5d} batches | loss: {:5.2f}".format(epoch, batchIdx, train_batch_size,
+                                                                                 cur_loss))
+                total_loss = 0
+                start_time = time.time()
 
 
 def evaluate(model, data_source):
@@ -148,20 +170,20 @@ def main():
     number_attention_head = 2
     dropout = 0.2
 
-    chatbot = ChatBot(ntokens, embedind_dimension, number_attention_head, number_hidden, number_layers, dropout)
+    chatbot = ChatBot(64, embedind_dimension, number_attention_head, number_hidden, number_layers, dropout).to(device)
 
     optimizer = torch.optim.SGD(chatbot.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1.0, gamma=0.95)
 
-    train_data, test_data = splitTrainAndTestData(data)
+    train_data_batched, test_data_batched = splitTrainAndTestData(data)
 
     # Train the model
     print("Training model...")
 
     for epoch in range(1, epochs + 1):
         epoch_start_time = time.time()
-        train(chatbot, optimizer, scheduler, data=train_data, epoch=epoch)
-        val_loss = evaluate(chatbot, test_data)
+        train(chatbot, optimizer, scheduler, data_batched=train_data_batched, epoch=epoch)
+        val_loss = evaluate(chatbot, test_data_batched)
 
         print("-" * 89)
         print(

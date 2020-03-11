@@ -18,7 +18,7 @@ class Dictionary:
         self.nbWords = 3
 
     def addWord(self, word):
-        if not word in self.word2Index:
+        if not word in self.word2Index.keys():
             self.word2Index[word] = len(self.word2Index.keys())
             self.index2Word.append(word)
             self.word2Count[word] = 1
@@ -32,13 +32,21 @@ class Dictionary:
         for word in parsedSentence:
             self.addWord(word)
 
-    def parseSentence(self, sentence):
+    def parseSentence(self, sentence, remove_unknown_words=False):
         if type(sentence) is list:
             sentence = ' '.join(sentence)
+
+        # Remove star character
+        sentence = sentence.replace("*", "")
 
         sentence = word_tokenize(sentence.lower())
         sentence = ["<SOS>"] + sentence
         sentence.append("<EOS>")
+
+        if remove_unknown_words:
+            # Remove unknown words
+            # Todo: Maybe not good for performance
+            sentence = [word for word in sentence if word in self.word2Index.keys()]
 
         return sentence
 
@@ -50,12 +58,11 @@ class Dictionary:
         print(self.word2Count)
 
     def oneHotEncode(self, word):
-        word = word.lower()
         one_hot = torch.zeros(self.nbWords)
         if word in self.word2Index.keys():
             one_hot[self.word2Index[word]] = 1
         else:
-            # print("{} unkownn".format(word))
+            print("{} unkownn".format(word))
             one_hot[UNKNOWN] = 1
 
         return one_hot
