@@ -12,11 +12,11 @@ import time
 import math
 
 pickle_file = "../dataset/comment-reply.pkl"
-dictionary = Dictionary()
 
 device = torch.device("cpu")
-# if torch.cuda.is_available():
-#     device = torch.device("cuda:0")
+if torch.cuda.is_available():
+    print("USING CUDA")
+    device = torch.device("cuda:0")
 
 
 def createDataSet():
@@ -53,10 +53,15 @@ bptt = 35
 print_interval = 200
 train_batch_size = 20
 eval_batch_size = 10
+batch_size = 20
+max_sentence_length = 15
+vocab_size = 2000
 
 best_val_loss = float("inf")
 epochs = 3
 best_model = None
+
+dictionary = Dictionary(max_sentence_length)
 
 
 def sentenceToTensor(sentence):
@@ -67,13 +72,37 @@ def sentenceToTensor(sentence):
     """
 
     parsed_sentence = dictionary.parseSentence(sentence, remove_unknown_words=True)
-    tensor = torch.zeros((len(parsed_sentence), dictionary.nbWords))
+    tensor = torch.zeros((max_sentence_length, dictionary.nbWords), dtype=torch.long)
 
     for i, word in enumerate(parsed_sentence):
         one_hot_word = dictionary.oneHotEncode(word)
         tensor[i] = one_hot_word
 
-    return tensor.long()
+    return tensor
+
+
+def batchToTensor(batch):
+    comment_tensors = torch.zeros((batch_size, max_sentence_length, dictionary.nbWords * 2), dtype=torch.long)
+    # reply_tensor = torch.zeros((batch_size, max_sentence_length, dictionary.nbWords), dtype=torch.long)
+
+    i = 0
+    for index, entry in batch.iterrows():
+        comment = entry['comment']
+        reply = entry['reply']
+
+        comment_tensor = sentenceToTensor(comment)
+        reply_tensor = sentenceToTensor(reply)
+
+        comment_tensors[i] = torch.cat([comment_tensor, reply_tensor], dim=1)
+        i += 1
+
+    return comment_tensors.to(device)
+
+
+def get_batch(tensor, index):
+    comment = torch.narrow(tensor[index], 1, 0, dictionary.nbWords)
+    reply = torch.narrow(tensor[index], 1, dictionary.nbWords, dictionary.nbWords)
+    return comment, reply
 
 
 def train(model, optimizer, scheduler, data_batched, epoch):
@@ -83,17 +112,16 @@ def train(model, optimizer, scheduler, data_batched, epoch):
     ntokens = dictionary.nbWords
 
     for batchIdx, batch in enumerate(data_batched):
-        # Go through each comment/reply in the batch
-        for entryIdx, entry in batch.iterrows():
-            data, target = entry['comment'], entry['reply']
-            data, target = sentenceToTensor(data).to(device), sentenceToTensor(target).to(device)
+        batchTensor = batchToTensor(batch)
 
-            print(data.shape, target.shape)
+        # Go through each comment/reply in the batch
+        for batch, i in enumerate(range(0, batchTensor.size(0) - 1)):
+            comment, reply = get_batch(batchTensor, i)
 
             optimizer.zero_grad()
-
-            output = model(data)
-            loss = criterion(output, target)
+            output = model(comment)
+            loss = criterion(output, reply)
+            print(loss)
 
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
@@ -134,7 +162,7 @@ def splitTrainAndTestData(data):
     nb_data = len(data)
     split_idx = math.floor(0.70 * nb_data)
 
-    return convertDataToTensors(data[:split_idx], data[split_idx:], 20000)
+    return convertDataToTensors(data[:split_idx], data[split_idx:], batch_size)
 
 
 def convertDataToTensors(train_data, test_data, max_size_per_batch):
@@ -163,14 +191,13 @@ def main():
     buildCorpus(data)
 
     # Hyper parameters
-    ntokens = dictionary.nbWords
-    embedind_dimension = 200
-    number_hidden = 200
-    number_layers = 2
-    number_attention_head = 2
+    embedind_dimension = 20
+    number_hidden = 1
+    number_layers = 1
+    number_attention_head = 1
     dropout = 0.2
 
-    chatbot = ChatBot(64, embedind_dimension, number_attention_head, number_hidden, number_layers, dropout).to(device)
+    chatbot = ChatBot(vocab_size, embedind_dimension, number_attention_head, number_hidden, number_layers, dropout).to(device)
 
     optimizer = torch.optim.SGD(chatbot.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1.0, gamma=0.95)

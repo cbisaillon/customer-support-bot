@@ -4,14 +4,16 @@ from collections import OrderedDict
 from operator import itemgetter
 from nltk.tokenize import sent_tokenize
 
-SOS = 0
-EOS = 1
+EOS = 0
+SOS = 1
 UNKNOWN = 2
 
 
 class Dictionary:
 
-    def __init__(self):
+    def __init__(self, max_sentence_length):
+        self.max_sentence_length = max_sentence_length
+
         self.word2Index = {"<SOS>": SOS, "<EOS>": EOS, "<UNK>": UNKNOWN}
         self.index2Word = ["<SOS>", "<EOS>", "<UNK>"]
         self.word2Count = OrderedDict({"<SOS>": 1, "<EOS>": 1, "<UNK>": 1})
@@ -41,6 +43,10 @@ class Dictionary:
 
         sentence = word_tokenize(sentence.lower())
         sentence = ["<SOS>"] + sentence
+
+        # Cut the sentence to maximum length
+        sentence = sentence[:self.max_sentence_length - 1] # Minus one for the EOS token
+
         sentence.append("<EOS>")
 
         if remove_unknown_words:
