@@ -30,38 +30,31 @@ def createDataSet():
                            save_file=pickle_file)
 
 
-def buildCorpus(redditData):
-    print("Building corpus...")
-    for sentence in brown.sents():
-        dictionary.addSentence(sentence)
-
-    # print("Brown corpus built.")
-    # print("Adding reddit data to dictionary")
-
-    # for comment in redditData['comment']:
-    #     dictionary.addSentence(comment)
-    #
-    # for reply in redditData['reply']:
-    #     dictionary.addSentence(reply)
-
-    print("Built corpus")
-
-
 criterion = nn.CrossEntropyLoss().to(device)
 lr = 5.0
 bptt = 35
-print_interval = 200
+print_interval = 20
 train_batch_size = 20
 eval_batch_size = 10
 batch_size = 20
 max_sentence_length = 15
 vocab_size = 2000
 
-best_val_loss = float("inf")
 epochs = 3
 best_model = None
 
 dictionary = Dictionary(max_sentence_length)
+
+
+def buildCorpus(redditData):
+    print("Building corpus...")
+    for sentence in brown.sents():
+        dictionary.addSentence(sentence)
+
+    dictionary.keepNWords(vocab_size)
+    print(dictionary.nbWords)
+
+    print("Built corpus")
 
 
 def sentenceToTensor(sentence):
@@ -102,7 +95,7 @@ def batchToTensor(batch):
 def get_batch(tensor, index):
     comment = torch.narrow(tensor[index], 1, 0, dictionary.nbWords)
     reply = torch.narrow(tensor[index], 1, dictionary.nbWords, dictionary.nbWords)
-    return comment, reply
+    return comment.to(device), reply.to(device)
 
 
 def train(model, optimizer, scheduler, data_batched, epoch):
@@ -114,42 +107,61 @@ def train(model, optimizer, scheduler, data_batched, epoch):
     for batchIdx, batch in enumerate(data_batched):
         batchTensor = batchToTensor(batch)
 
+        lastComment = None
+        lastOutput = None
+
         # Go through each comment/reply in the batch
-        for batch, i in enumerate(range(0, batchTensor.size(0) - 1)):
+        for a, i in enumerate(range(0, batchTensor.size(0) - 1)):
             comment, reply = get_batch(batchTensor, i)
+
+            # Start the sentence with sos token
+            # generated_sentence = dictionary.oneHotEncode("<SOS>").to(device)
 
             optimizer.zero_grad()
             output = model(comment)
             loss = criterion(output, reply)
-            print(loss)
 
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
             optimizer.step()
 
             total_loss += loss.item()
-            if batch % print_interval == 0 and batch > 0:
-                cur_loss = total_loss / print_interval
-                elapsed = time.time() - start_time
 
-                print("Epoch {:3d} | {:5d}/{:5d} batches | loss: {:5.2f}".format(epoch, batchIdx, train_batch_size,
-                                                                                 cur_loss))
-                total_loss = 0
-                start_time = time.time()
+            # For debug purposes
+            lastComment = comment
+            lastOutput = output
+
+        if batchIdx % print_interval == 0 and batchIdx > 0:
+            cur_loss = total_loss / print_interval
+            elapsed = time.time() - start_time
+
+            print("Epoch {:3d} | {:5d}/{:5d} batches | loss: {:5.2f}".format(epoch, batchIdx, len(data_batched),
+                                                                             cur_loss))
+
+            print("Example:")
+            print(dictionary.oneHotToSentence(lastComment))
+            print(dictionary.oneHotToSentence(lastOutput))
+
+            total_loss = 0
+            start_time = time.time()
 
 
-def evaluate(model, data_source):
+def evaluate(model, data_source_batched):
     model.eval()
     total_loss = 0
     ntokens = dictionary.nbWords
     with torch.no_grad():
-        for i in range(0, data_source.size(0) - 1, bptt):
-            data, targets = get_batch(data_source, i)
-            output = model(data)
-            output_flat = output.view(-1, ntokens)
-            total_loss += criterion(output_flat, targets)
+        for batchIdx, batch in enumerate(data_source_batched):
+            batchTensor = batchToTensor(batch)
 
-    return total_loss / (len(data_source) - 1)
+            # Go through each comment/reply in the batch
+            for a, i in enumerate(range(0, batchTensor.size(0) - 1)):
+                comment, reply = get_batch(batchTensor, i)
+
+                output = model(comment)
+                total_loss += criterion(output, reply)
+
+    return total_loss / (len(data_source_batched) - 1)
 
 
 def splitTrainAndTestData(data):
@@ -197,7 +209,9 @@ def main():
     number_attention_head = 1
     dropout = 0.2
 
-    chatbot = ChatBot(vocab_size, embedind_dimension, number_attention_head, number_hidden, number_layers, dropout).to(device)
+    chatbot = ChatBot(vocab_size, embedind_dimension, number_attention_head, number_hidden, number_layers, dropout)\
+        .to(device)
+    chatbot.cuda()
 
     optimizer = torch.optim.SGD(chatbot.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1.0, gamma=0.95)
@@ -205,16 +219,19 @@ def main():
     train_data_batched, test_data_batched = splitTrainAndTestData(data)
 
     # Train the model
+    best_val_loss = float("inf")
     print("Training model...")
 
     for epoch in range(1, epochs + 1):
         epoch_start_time = time.time()
+        print("Start of batch")
         train(chatbot, optimizer, scheduler, data_batched=train_data_batched, epoch=epoch)
+        print("Evaluation model for this epoch...")
         val_loss = evaluate(chatbot, test_data_batched)
 
         print("-" * 89)
         print(
-            "| End of epoch {:3d} | time: {5.2f}s | valid loss {:5.2f}".format(epoch, (time.time() - epoch_start_time),
+            "| End of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f}".format(epoch, (time.time() - epoch_start_time),
                                                                                val_loss))
         print("-" * 89)
 

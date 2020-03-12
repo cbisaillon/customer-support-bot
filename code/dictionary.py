@@ -1,6 +1,6 @@
 import torch
 from nltk.tokenize import word_tokenize
-from collections import OrderedDict
+from collections import Counter
 from operator import itemgetter
 from nltk.tokenize import sent_tokenize
 
@@ -16,7 +16,7 @@ class Dictionary:
 
         self.word2Index = {"<SOS>": SOS, "<EOS>": EOS, "<UNK>": UNKNOWN}
         self.index2Word = ["<SOS>", "<EOS>", "<UNK>"]
-        self.word2Count = OrderedDict({"<SOS>": 1, "<EOS>": 1, "<UNK>": 1})
+        self.word2Count = Counter({"<SOS>": 1, "<EOS>": 1, "<UNK>": 1})
         self.nbWords = 3
 
     def addWord(self, word):
@@ -27,7 +27,6 @@ class Dictionary:
             self.nbWords += 1
         else:
             self.word2Count[word] += 1
-
 
     def addSentence(self, sentence):
         parsedSentence = self.parseSentence(sentence)
@@ -45,7 +44,7 @@ class Dictionary:
         sentence = ["<SOS>"] + sentence
 
         # Cut the sentence to maximum length
-        sentence = sentence[:self.max_sentence_length - 1] # Minus one for the EOS token
+        sentence = sentence[:self.max_sentence_length - 1]  # Minus one for the EOS token
 
         sentence.append("<EOS>")
 
@@ -61,7 +60,19 @@ class Dictionary:
         Remove the least used words until the vocabulary size is of size n
         :param n: the size that the vocabulary should be
         """
-        print(self.word2Count)
+
+        keep_words = self.word2Count.most_common(n)
+
+        # Rebuilt the index
+        self.nbWords = n
+        new_word_2_index = {}
+        new_index_2_word = []
+        for word, count in keep_words:
+            new_word_2_index[word] = len(new_word_2_index.keys())
+            new_index_2_word.append(word)
+
+        self.word2Index = new_word_2_index
+        self.index2Word = new_index_2_word
 
     def oneHotEncode(self, word):
         one_hot = torch.zeros(self.nbWords)
@@ -72,6 +83,19 @@ class Dictionary:
             one_hot[UNKNOWN] = 1
 
         return one_hot
+
+    def oneHotToWord(self, one_hot_word):
+        print(one_hot_word.shape)
+        word_idx = torch.argmax(one_hot_word).item()
+        print(word_idx)
+        return self.index2Word[int(word_idx)]
+
+    def oneHotToSentence(self, one_hot_sentence):
+        words = []
+        for one_hot_word in one_hot_sentence:
+            words.append(self.oneHotToWord(one_hot_word))
+
+        return ' '.join(words)
 
     def entryToTensor(self, sentences):
         comment = sentences['comment']

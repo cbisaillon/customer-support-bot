@@ -54,7 +54,7 @@ class ChatBot(nn.Module):
         self.decoder.bias.data.zero_()
         self.decoder.weight.data.uniform_(-initrange, initrange)
 
-    def forward(self, src):
+    def forward(self, src, generated_sentence):
         if self.src_mask is None or self.src_mask.size(0) != len(src):
             device = src.device
             mask = self._generate_square_subsequent_mast(len(src)).to(device)
@@ -62,6 +62,8 @@ class ChatBot(nn.Module):
 
         src = self.encoder(src) * math.sqrt(self.ninp)
         src = self.pos_encoder(src)
-        output = self.transformer_encoder(src, self.src_mask)
+
+        output = self.transformer_encoder(src, self.src_mask)  # .view(15, 2000)
         output = self.decoder(output)
+
         return output
