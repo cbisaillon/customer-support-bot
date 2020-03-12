@@ -1,7 +1,7 @@
 from dotenv import load_dotenv, find_dotenv
-from code.data.Scrapper import Scrapper
-from code.dictionary import Dictionary
-from code.networks.networks import ChatBot
+from code.home_made.data.Scrapper import Scrapper
+from code.home_made.dictionary import Dictionary
+from code.home_made.networks.networks import ChatBot
 import pandas as pd
 import getopt
 import sys
@@ -11,7 +11,7 @@ import torch.nn as nn
 import time
 import math
 
-pickle_file = "../dataset/comment-reply.pkl"
+pickle_file = "../../dataset/comment-reply.pkl"
 
 device = torch.device("cpu")
 if torch.cuda.is_available():
