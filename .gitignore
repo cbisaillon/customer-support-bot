@@ -1,4 +1,4 @@
 /.idea/
 /.env
 /dataset/comment-reply.pkl
-/code/DialoGPT/dataset/DialoGPT-large/
+/server/src/DialoGPT/dataset/DialoGPT-large/

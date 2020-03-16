@@ -1,7 +1,7 @@
 from dotenv import load_dotenv, find_dotenv
-from code.home_made.data.Scrapper import Scrapper
-from code.home_made.dictionary import Dictionary
-from code.home_made.networks.networks import ChatBot
+from src.home_made.data.Scrapper import Scrapper
+from src.home_made.dictionary import Dictionary
+from src.home_made.networks.networks import ChatBot
 import pandas as pd
 import getopt
 import sys
