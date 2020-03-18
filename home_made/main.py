@@ -248,7 +248,7 @@ def main():
 
 
 def printUsage():
-    print("main.py [-c]")
+    print("app.py [-c]")
 
 
 if __name__ == "__main__":
