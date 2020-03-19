@@ -1,6 +1,7 @@
 from flask import Flask, json, render_template, request
 from methods.SimpleAnswerExtraction import SimpleAnswerExtraction
 from methods.TextGeneration import TextGeneration
+from methods.TransferLearning import TransferLearning
 
 api = Flask(__name__)
 
@@ -14,7 +15,7 @@ We can help you get to our office by clicking this link https://www.google.ca/ma
 Our phone number is 514-222-4444.
 """
 
-method = TextGeneration(context)
+method = TransferLearning(context)
 
 
 @api.route('/')
